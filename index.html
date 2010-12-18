@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Lightspeed</title>
+		
+<!--
+	Lightspeed
+	© 2010 Sijmen Mulder
+
+	A small experiment to see what it would be like to have a game or such that
+	took into account the speed of light when rendering (but otherwise ignoring
+	relativity). The speed of light (var c, below) is set very low to make
+	these effects more apparent.
+-
+	I, the copyright holder of this work, hereby release it into the public
+	domain. This applies worldwide.
+
+	In case this is not legally possible: I grant anyone the right to use this
+	work for any purpose, without any conditions, unless such conditions are
+	required by law.
+-->
+		
+		<style>
+		
+body {
+	color: white;
+	background-color: black;
+	margin: 0;
+	overflow: hidden;
+	font-family: sans-serif;
+}
+
+.overlay {
+	position: fixed;
+	left: 20px;
+	right: 20px;
+	bottom: 20px;
+	padding: 10px;
+	opacity: 0.5;
+	background-color: #222;
+	border-radius: 5px;
+	-moz-border-radius: 5px;
+	-webkit-border-radius: 5px;
+}
+
+.overlay p {
+	margin: 0;
+	font-size: small;
+}
+
+	</style>
+	</head>
+	<body>
+		<canvas id="canvas"
+			<p><strong>This page requires a browser with canvas support.</strong></p>
+		</canvas>
+		<div class="overlay">
+			<p><strong>Unfinished!</strong> Drag to create a new mover. The dim circles represent the mover’s actual location, while the bright circle is where it would be perceived to be at the location of the mouse pointer.</p>
+		</div>
+		<script>
+		
+var c = 250; // speed of light
+var canvas = document.getElementById('canvas');
+var context;
+
+var colours = {
+	mover: '#333',
+	observedMover: 'white',
+	moverLine: '#222',
+	newMover: '#888',
+	newMoverLine: '#888',
+	newMoverMax: '#444'
+};
+
+function Vector(x, y) {
+	this.x = x || 0;
+	this.y = y || 0;
+}
+
+Vector.fromMouse = function(event) {
+	return new Vector(event.clientX, event.clientY);
+};
+
+Vector.fromMouseToElement = function(event, element) {
+	return Vector.fromMouse(event).clientToElement(element);
+}
+
+Vector.prototype.size = function() {
+	return Math.sqrt(this.x * this.x + this.y * this.y);
+};
+
+Vector.prototype.clientToElement = function(element) {
+	return new Vector(
+		this.x - element.offsetLeft,
+		this.y - element.offsetTop
+	);
+};
+
+Vector.prototype.add = function(vector) {
+	return new Vector(
+		this.x + vector.x,
+		this.y + vector.y
+	);
+};
+
+Vector.prototype.substract = function(vector) {
+	return new Vector(
+		this.x - vector.x,
+		this.y - vector.y
+	);
+};
+
+Vector.prototype.multiply = function(scalar) {
+	return new Vector(
+		this.x * scalar,
+		this.y * scalar
+	);
+};
+
+function Mover(position, velocity) {
+	this.position = position;
+	this.velocity = velocity;
+	this.previousPositions = [];
+}
+
+Mover.prototype.pushPosition = function(time, position) {
+	this.previousPositions.push({ 
+		time: time,
+		position: position
+ 	});
+};
+
+Mover.prototype.findObservedPosition = function(observerPosition, time) {
+	var length = this.previousPositions.length;
+	var closestInPast;
+	for (var i = 0; i < length; i++) {
+		var previousPosition = this.previousPositions[i];
+		var distance = observerPosition.substract(previousPosition.position).size();
+		var observedTime = previousPosition.time + distance / c;
+		if (time > observedTime) {
+			if (!closestInPast || closestInPast.observedTime < observedTime) {
+				closestInPast = {
+					position: previousPosition.position,
+					observedTime: observedTime
+				};
+			}
+		}
+	}
+	if (closestInPast) {
+		return closestInPast.position;
+	}
+};
+
+function drawMover(pos, type) {
+	context.fillStyle = colours[type];
+	context.beginPath();
+	context.arc(pos.x, pos.y, 3, 0, Math.PI * 2, false);
+	context.closePath();
+	context.fill();
+}
+
+function drawLine(pos1, pos2, color) {
+	context.strokeStyle = color;
+	context.beginPath();
+	context.moveTo(pos1.x, pos1.y);
+	context.lineTo(pos2.x, pos2.y);
+	context.closePath();
+	context.stroke();
+}
+
+function drawSpeedBar(time) {
+	var phase = time - Math.floor(time / 2) * 2;
+	var startPos = new Vector(20.5, 20.5);
+	var vector = new Vector(c, 0);
+	
+	drawLine(startPos, startPos.add(vector), '#444');
+
+	if (phase < 1) {
+		drawLine(startPos, startPos.add(vector.multiply(phase)), '#888');
+	} else {
+		drawLine(startPos.add(vector.multiply(phase - 1)), startPos.add(vector), '#888');
+	}
+}
+
+refitCanvas = function() {
+	canvas.width = document.documentElement.clientWidth;
+	canvas.height = document.documentElement.clientHeight;
+}
+
+function run() {
+	var time = 0;
+	
+	var movers = [];
+	var observerPosition;
+	
+	var newMoverInfo;
+	
+	calculateTimes = function() {
+		var startTicks;
+		var lastTicks;
+		
+		return function() {
+			var ticks = new Date().getTime();
+			if (!startTicks) {
+				startTicks = lastTicks = ticks;
+				return;
+			} else {
+				time = (ticks - startTicks) / 1000;
+				var dt = (ticks - lastTicks) / 1000; 
+				lastTicks = ticks;
+				return dt;
+			}
+		}
+	}();
+	
+	simulate = function(dt) {
+		var moverCount = movers.length;
+		for (var i = 0; i < moverCount; i++) {
+			var mover = movers[i];
+
+			mover.position = mover.position.add(mover.velocity.multiply(dt));
+			if (mover.position.x < 0 && mover.velocity.x < 0) {
+				mover.position.x = 0;
+				mover.velocity.x *= -1;
+			}
+			if (mover.position.x > canvas.width && mover.velocity.x > 0) {
+				mover.position.x = canvas.width;
+				mover.velocity.x *= -1;
+			}
+			if (mover.position.y < 0 && mover.velocity.y < 0) {
+				mover.position.y = 0;
+				mover.velocity.y *= -1;
+			}
+			if (mover.position.y > canvas.height && mover.velocity.y > 0) {
+				mover.position.y = canvas.height;
+				mover.velocity.y *= -1;
+			}
+
+			mover.pushPosition(time, mover.position);
+			if (observerPosition) {
+				mover.observedPosition = mover.findObservedPosition(observerPosition, time);
+			} else {
+				mover.observedPosition = null;
+			}
+		}
+	};
+	
+	draw = function() {
+		context.fillStyle = 'black'
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		
+		var moverCount = movers.length;
+		for (var i = 0; i < moverCount; i++) {
+			var mover = movers[i];
+			if (mover.observedPosition) {
+				drawLine(mover.position, mover.observedPosition, colours.moverLine);
+			}
+			drawMover(mover.position, 'mover');
+		}
+		for (var i = 0; i < moverCount; i++) {
+			var mover = movers[i];
+			if (mover.observedPosition) {
+				drawMover(mover.observedPosition, 'observedMover');
+			}
+		}
+		
+		if (newMoverInfo) {
+			if (newMoverInfo.velocity) {
+				drawLine(newMoverInfo.position, 
+					newMoverInfo.position.add(newMoverInfo.maxVelocity), colours.newMoverMax);
+				drawLine(newMoverInfo.position, 
+					newMoverInfo.position.add(newMoverInfo.velocity), colours.newMoverLine);
+			}
+			drawMover(newMoverInfo.position, 'newMover');
+		}
+		
+		//drawSpeedBar(time);
+	};
+	
+	loop = function() {
+		refitCanvas();
+		var dt = calculateTimes();
+		if (dt) {
+			simulate(dt);
+		}
+		draw();
+		setTimeout(loop, 0);
+	};
+	
+	canvas.addEventListener('mousedown', function(event) {
+		newMoverInfo = {
+			position: Vector.fromMouseToElement(event, canvas)
+		};
+	}, true);
+
+	canvas.addEventListener('mousemove', function(event) {
+		var pos = Vector.fromMouseToElement(event, canvas);
+		observerPosition = pos;
+		if (newMoverInfo) {
+			newMoverInfo.velocity = pos.substract(newMoverInfo.position);
+			var speed = newMoverInfo.velocity.size();
+			newMoverInfo.maxVelocity = newMoverInfo.velocity.multiply(c / speed);
+			if (speed > c) {
+				newMoverInfo.velocity = newMoverInfo.maxVelocity;
+			}
+		}
+	}, true);
+
+	canvas.addEventListener('mouseup', function(event) {
+		if (newMoverInfo && newMoverInfo.velocity) {
+			movers.push(new Mover(newMoverInfo.position, newMoverInfo.velocity));
+		};
+		newMoverInfo = null;
+	}, true);
+	
+	loop();
+}
+
+if (canvas.getContext) {
+	refitCanvas();
+	context = canvas.getContext('2d')
+	if (context) {
+		run();
+	}
+}
+		
+		</script>
+	</body>
+</html>
