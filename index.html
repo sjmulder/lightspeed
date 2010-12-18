@@ -171,20 +171,6 @@ function drawLine(pos1, pos2, color) {
 	context.stroke();
 }
 
-function drawSpeedBar(time) {
-	var phase = time - Math.floor(time / 2) * 2;
-	var startPos = new Vector(20.5, 20.5);
-	var vector = new Vector(c, 0);
-	
-	drawLine(startPos, startPos.add(vector), '#444');
-
-	if (phase < 1) {
-		drawLine(startPos, startPos.add(vector.multiply(phase)), '#888');
-	} else {
-		drawLine(startPos.add(vector.multiply(phase - 1)), startPos.add(vector), '#888');
-	}
-}
-
 refitCanvas = function() {
 	canvas.width = document.documentElement.clientWidth;
 	canvas.height = document.documentElement.clientHeight;
@@ -276,8 +262,6 @@ function run() {
 			}
 			drawMover(newMoverInfo.position, 'newMover');
 		}
-		
-		//drawSpeedBar(time);
 	};
 	
 	loop = function() {
