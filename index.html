@@ -69,7 +69,6 @@ var context;
 var colours = {
 	mover: '#333',
 	observedMover: 'white',
-	moverLine: '#222',
 	newMover: '#888',
 	newMoverLine: '#888',
 	newMoverMax: '#444'
@@ -241,9 +240,6 @@ function run() {
 		var moverCount = movers.length;
 		for (var i = 0; i < moverCount; i++) {
 			var mover = movers[i];
-			if (mover.observedPosition) {
-				drawLine(mover.position, mover.observedPosition, colours.moverLine);
-			}
 			drawMover(mover.position, 'mover');
 		}
 		for (var i = 0; i < moverCount; i++) {
